@@ -1,0 +1,1207 @@
+---
+title: "Trabajo práctico Nº2 AID C1 2022"
+author: "Damián Fontenla"
+output: html_document
+date: '2022-07-11'
+---
+
+```{r setup, include=FALSE}
+
+
+library("readxl")
+library("data.table")
+library(tidyverse)
+library(ggrepel)
+library(gsheet)
+#library(rgl)
+library(plot3D)
+library(GGally)
+# scatter plot
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(corrplot)
+library(factoextra)
+library(ggfortify)
+library(rsample)
+library('mvShapiroTest')
+library(biotools)
+library(klaR) 
+library(ggord)
+
+
+
+library(mlr)
+library(BSDA)
+library(viridisLite)
+#library(xlsx)
+library(dplyr)
+library(ggplot2)
+#install_github("vqv/ggbiplot")
+library(ggbiplot)
+library(GGally)
+library(nortest)
+library(ggforce)
+
+library(scde)
+library(devtools)
+#library(geoR)
+library(mvnormtest)
+library(MASS)
+library(npmv)
+library(reshape)
+library(lattice)
+
+library(DMwR) 
+library(Rtsne)
+library(pracma)
+library(e1071)
+library(nnet)
+library(cluster)
+library(gridExtra)
+library(cowplot)
+
+library(ggpattern)
+library(ggpubr)
+library(scatterplot3d)  
+library(biotools)
+library(corpcor)
+library(Hotelling)
+library(DescTools)
+library(car)
+library(knitr)
+# library(vegan) # si la cargo, empieza a hacerme lío con el paquete mlr!!
+
+library(dendextend)
+library(magrittr)
+#library(googlesheets)
+
+library(reconPlots)
+library(tidyr)
+```
+
+## Consignas
+
+#### A.- Para la base de datos seleccionada genere una muestra aleatoria estratificada y balanceada por variedad de vino de tamaño n = 2000 utilizando como semilla los últimos tres dígitos del DNI/PASAPORTE. 
+#### B. De ahora en más trabaje con esta base de datos para el resto del trabajo práctico. Realice los procedimientos que se detallan a continuación acompañando los procedimientos de los gráficos que considere adecuados.
+
+```{r}
+datos_tp <-read_excel("DatosTP1.xlsx") %>% mutate_at('variedad', as.factor)
+glimpse(datos_tp)
+set.seed(661) #fijo la semilla 
+
+sample_var_1 = datos_tp %>% filter(datos_tp$variedad == 1)
+sample_var_2 = datos_tp %>% filter(datos_tp$variedad == 2)
+index_sample_data_1 <- sample(1:nrow(sample_var_1), size=1000, replace=FALSE)
+index_sample_data_2 <- sample(1:nrow(sample_var_2), size=1000, replace=FALSE)
+sample_data_var_1 = sample_var_1[index_sample_data_1,]
+sample_data_var_2 = sample_var_2[index_sample_data_2,]
+sample_data <- rbindlist(list(sample_data_var_1, sample_data_var_2))    # Rbind data.tables
+
+glimpse(sample_data)
+
+print(paste("Balanced dataset - Variedad 1: ", nrow((sample_data %>% filter(variedad == 1)))))
+print(paste("Balanced dataset - Variedad 2: ", nrow((sample_data %>% filter(variedad == 2)))))
+```
+
+##### Analizo el dataset
+```{r}
+colnames(sample_data) <- c('acidez_fija','acidez_volatil','acido_citrico','azucar_residual','cloruros','anhidrido_sulfuroso_libre','anhidrido_sulfuroso_total','densidad','pH','sulfatos','alcohol','calidad','variedad')
+sample_data
+```
+
+#### 1.- Aplique el Análisis de Componentes Principales a la base de datos. Presente los resultados y gráficos que considere adecuados. Interprete los resultados.
+
+##### Me quedo con las variables numéricas para avanzar con el análisis
+```{r}
+df_pca = sample_data
+df_numericas_pca <-df_pca %>% dplyr::select(where(is.numeric))
+
+```
+
+##### Realizo un análisis univariado de cada atributo del conjunto de datos
+```{r}
+data_long <- melt(df_pca)  
+#data_long
+ggplot(data_long, aes(x=variable, y=value)) + 
+    geom_boxplot() +
+    facet_wrap(~variable, scale="free")
+```
+
+##### Realizo un análisis univariado de cada atributo del conjunto de datos, segregado por variedad de vinos
+```{r}
+#Boxplot diferenciado por variedad de vino
+ggplot(data_long, aes(x=variable, y=value, fill= variedad)) + 
+    geom_boxplot() +
+    facet_wrap(~variable, scale="free")
+```
+
+##### Genero una matriz de correlación entre las variables para el correspondiente análisis
+```{r}
+#Matriz de correlación
+m_cor <- cor(df_numericas_pca) 
+
+# representa la matriz de correlaciones mediante círculos
+corrplot(m_cor,method="circle") 
+```
+
+##### Representacion de la varianza proporcionada por cada variable
+```{r}
+
+variance_pca <- df_pca %>% 
+  summarise_if(is.numeric, var) %>% 
+  t() %>% 
+  data.frame() %>% 
+  round(3)
+
+variance_pca
+```
+
+##### Generación de componentes PCA para el conjunto de datos
+
+```{r}
+
+pca <- prcomp(df_numericas_pca,scale = TRUE)# con datos estandarizados
+names(pca)
+```
+
+##### Cargas (Loadings) para las componentes generadas
+```{r}
+round(pca$rotation,2)
+```
+
+##### Correlación entre componentes generadas y atributos del conjunto de daots
+```{r}
+contrib <- as.matrix(round(pca$rotation,2))
+corrplot(contrib,is.corr=FALSE)
+```
+
+##### Represento la varianza explicada por cada componente y de forma acumulada
+```{r}
+round(pca$center,2) #vector de medias
+prop_varianza <- pca$sdev^2 / sum(pca$sdev^2)
+prop_varianza #varianza explicada por cada componente
+prop_varianza_acum_pca <- cumsum(prop_varianza)
+prop_varianza_acum_pca #varianza acumilada explicada por los componentes de forma creciente segun su importancia
+```
+
+##### Representación gráfica de la varianza explicada por cada componente y de forma acumulada
+```{r}
+ggplot(data = data.frame(prop_varianza_acum_pca, pc = 1:12),
+       aes(x = pc, y = prop_varianza_acum_pca, group = 1)) +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs(x = "Componente principal",
+       y = "Prop. varianza explicada acumulada")
+```
+
+```{r}
+screeplot(pca, type = "l", npcs = 12)
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+```
+
+```{r}
+fviz_eig(pca, ncp =12, addlabels = TRUE, main="")
+```
+
+##### Visualización de scores para todas las componentes principales
+
+```{r}
+
+#pca_2$x[,1]# scores para la primer componente (PC1)
+res.ind <- get_pca_ind(pca)
+head(res.ind$coord,10)
+```
+
+##### Grafico biplot para comprender la explicación de cada componente generada según la variedad y los autovectores de cada atributo
+
+```{r}
+autoplot(pca, 
+         data = df_pca, 
+         colour = 'variedad',
+         loadings = TRUE, 
+         loadings.colour = 'black',
+         loadings.label = TRUE, 
+         loadings.label.size = 3)
+```
+
+> #### Conclusiones
+> Podemos obtener como resultado del PCA, que sería prudente quedarnos con las primeras 7 componentes que representan más del 86% de la variabilidad de la información, además se comienza a aplanar la curva que explica la diferencia de vairabilidad entre las siguientes componentes
+>
+> Observamos que los principales atributos con los que nos quedamos a posteriri de decidir con la información de las componentes serian anhidrido_sulfuroso_total (1) densidad (2) acido_citrico (3) sulfatos (4) calidad (5) pH (6) alcohol (7)
+>
+> anhidrido_sulfuroso_total y anhidrido_sulfuroso_libre correlacionan de forma casi total
+>
+> Mientras que otras variables tienne una correlación alta dada por el ángulo que forman sus autovectores Azucar_resicual/Acido_citrico,  acidez_fija/cloruros, sulfatos/acidez_volatil
+>
+> Por otro lado, vemos que otras variables no tienen ningún tipo de correlación y las podemos determinar independientes entre si, como alcohol/acidez_volatil, ph/calidad, acidez_fija/azucar_residual
+
+
+
+```{r}
+```
+
+#### 2.- Realice el Análisis Discriminante para clasificar los vinos según la variable variedad de vino. Interprete los resultados.
+
+```{r}
+#Separo el dataset para trabajar el analisis discriminante
+df_ad = sample_data
+```
+
+##### Grafico la distribución de cada variable separada por variedad para su correspondiente análisis
+
+```{r}
+ggpairs(df_ad, legend = 1, columns = 1:12, aes(color = variedad, alpha = 0.5),
+        upper = list(continuous = "points"))+
+  theme(legend.position = "bottom")
+```
+
+##### Separo el dataset en entrenamiento y prueba para poder realizar la predicción según el análisis discriminate y no sobreajustar los resultados de la predicción
+
+```{r}
+#Separo en train y test para predecir
+
+set.seed(661)#setear la semilla
+# Create data split for train and test
+df_split_ad <- initial_split(df_ad,
+                          prop = 0.9,
+                          strata = variedad)#en este caso no es necesario porque las clases están balanceadas
+
+df_train_ad <- df_split_ad %>% training()
+
+df_test_ad <- df_split_ad %>% testing()
+
+# Número de datos en test y train
+paste0("Total del dataset de entrenamiento: ", nrow(df_train_ad))
+```
+
+```{r}
+paste0("Total del dataset de testeo: ", nrow(df_test_ad))
+
+```
+
+##### Genero sub conjuntos por variedad de vinos para hacer el correspondiente análisis de normalidad y homocedasticidad
+```{r}
+blanco_ad<- subset(df_ad[,1:12], df_ad$variedad == "1")
+tinto_ad <- subset(df_ad[,1:12], df_ad$variedad == "2")
+```
+
+
+##### Valido normalidad con un test de Shapiro-Wilk
+
+```{r}
+mvShapiro.Test(as.matrix(blanco_ad))
+```
+
+##### Valido normalidad con un test de Shapiro-Wilk
+
+```{r}
+#Valido normalidad => no se cumple porque es < 0,05
+mvShapiro.Test(as.matrix(tinto_ad))
+```
+
+
+##### Valido homocedasticidad con boxM
+
+```{r}
+#Matriz vairanza y covarianza son iguales, valido homocedasticidad => no se cumple tampoco
+
+boxM(data = df_ad[, 1:12], grouping = df_ad$variedad)
+
+#Por mas que nada se cumple seguimos el analisis, sabiendo que los resultados pueden no tener la validez que esperamos
+
+```
+
+> #### Conclusiones
+> Determino independencia suponiendo que los datos se obtuvieron de fuentes independientes
+>
+> Vemos que no se cumple la normalidad en ninguna de las dos distribuciones planteadas
+>
+> Vemos que no se cumple homocedasticidad en el conjunto de datos
+>
+> Por mas que los supuestos no se cumplen, avanzamos con el análisis a sabiendas que los resultados pueden no tener la validez que esperamos
+
+
+##### Ejecuto el análisis de discriminantes para obtener la función de dimensiones que nos separen los conjuntos de datos
+
+```{r}
+model_lda <- lda(variedad~., data=df_train_ad)
+model_lda
+```
+
+##### Represento la varianza entre grupos explicada por cada FD, en este caso hay solo una que representa prácticamente el 100% de la varianza
+```{r}
+prop = model_lda$svd^2/sum(model_lda$svd^2)
+prop 
+```
+
+```{r}
+#Coeficiente lda calculado para cada entrada del set analizado
+lda.data <- cbind(df_train_ad, predict(model_lda)$x)
+#lda.data
+#ggplot(lda.data, aes(LD1)) +
+#  geom_point(aes(color = variedad))
+
+```
+
+```{r}
+#Predicciones sobre el set de entrenamiento para cada entrada del set analizado
+predictions_train <- model_lda %>% predict(df_train_ad)
+#predictions_train$class
+
+```
+
+##### Matriz de confusión con los resultados de la predicción sobre el conjunto de entrenamiento
+```{r}
+table(predict(model_lda,type="class")$class,df_train_ad$variedad)
+```
+
+```{r}
+#partimat (variedad~. , data=df_train_ad , method="lda")
+#ggord(model_lda, df_train_ad$variedad)
+```
+
+```{r}
+predictions <- model_lda %>% predict(df_test_ad)
+predictions$class
+```
+
+##### Matriz de confusión con los resultados de la predicción sobre el conjunto de prueba
+
+```{r}
+lda.test <- predict(model_lda,df_test_ad)
+df_test_ad$lda <- lda.test$class
+table(df_test_ad$lda,df_test_ad$variedad)
+```
+
+
+> Si los supuesto no se cumplen, podrían no ser válidos los resultados obtenidos
+> Como se utiliza las matrices de varianzas y covarianzas, estas técnicas son sensibles a outliers
+
+
+```{r}
+model_qda <- qda(variedad ~ ., df_train_ad)
+model_qda
+```
+
+
+##### Matriz de confusión con los resultados de la predicción sobre el conjunto de entrenamiento evaluado con QDA
+
+```{r}
+table(predict(model_qda,type="class")$class,df_train_ad$variedad)
+```
+
+##### Matriz de confusión con los resultados de la predicción sobre el conjunto de prueba evaluado con QDA
+
+```{r}
+lda.test_qda <- predict(model_qda,df_test_ad)
+df_test_ad$qda <- lda.test_qda$class
+table(df_test_ad$qda,df_test_ad$variedad)
+```
+
+> Conclusiones
+> Podemos determinar a partir de la predicción y el analisis de su matriz de confusión, la separación generada por LDA en el conjunto de datos, arroja un accuracy del 100% en el dataset de prueba
+>
+> Solo tenemos una dimensión debido a que nuestras variables objetivos solamente tienen dos posibilidades
+>
+> Por el tipo de dato a validar y el dataset analizado, podría tener mayor sentido analizar otra variable para separa el mismo como por ejemplo la calidad donde nos arrojarían varias dimensiones a separar
+>
+> En principio para el objetivo del análisis, determinamos que LDA funciona muy bien en su predicción de vinos tintos y blancos
+>
+> No vemos una mejora significativa utilizando QDA
+
+#### 3.- Aplique el algoritmo SVM al conjunto de datos. Interprete los resultados.
+
+```{r}
+df_svm = sample_data
+```
+
+```{r pressure, echo=FALSE}
+theme <- theme(text = element_text(size=10),plot.title = element_text(size=12, face="bold.italic",
+               hjust = 0.5), axis.title.x = element_text(size=10, face="bold", colour='black'),
+               axis.title.y = element_text(size=10, face="bold"),panel.border = element_blank(),
+               panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.title = element_text(face="bold"))
+```
+
+##### Analizo correlación de datos
+
+```{r}
+#Veo como correlacionan los datos
+df_svm %>% ggpairs(.,mapping=ggplot2::aes(color = variedad,alpha = 0.1),
+        upper = list(continuous = wrap("cor", size = 2.5),discrete = "blank", combo="blank"),
+        lower = list(combo = "box"),progress = F)+
+        theme+
+        labs(title= 'Descripción de variables en la base de datos', x='Variable', y='Variable')+
+        scale_fill_manual(values=c('royalblue2','red'))+
+        scale_color_manual(values=c('royalblue2','#ff7474ff'))
+```
+
+```{r}
+# Grafico biplot de pca para poder comparar posteriormente con analisis de svm
+datos_para_acp = df_svm %>% 
+      dplyr::select(is.numeric) # todas las variables numéricas
+df_svm.pc = prcomp(datos_para_acp,scale = TRUE) #escalo los datos
+#grafico
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1,alpha=0.5,
+         groups=factor(df_svm$variedad)) +
+        scale_color_manual(name="variedad",values=c('royalblue2','#ff7474ff'),
+                           labels=c("blanco",'tinto')) +
+        theme + labs(title='Análisis de componentes principales') + 
+        theme(legend.position=c(.85,.15)) 
+```
+
+```{r}
+#Analisis estadistico univariado agrupado por variedad => Estaria bueno tenerlo pero no lo puedo hacer andar de momento
+
+# Creo dataframes de acuerdo al diagnóstico
+ data_n <- df_svm%>%filter(variedad==1)
+ data_m <- df_svm%>%filter(variedad==2)
+
+```
+
+
+##### Analizo normalidad multivariada y multivariada por grupo con Shapiro Wilks
+
+```{r}
+
+pval_all <- mshapiro.test(t(df_svm[,1:12]))
+pval_blanco <- mshapiro.test(t(df_svm%>%dplyr::filter(variedad==1)%>% dplyr::select(1:12)))
+pval_tinto <- mshapiro.test(t(df_svm%>%dplyr::filter(variedad==2)%>% dplyr::select(1:12)))
+
+ShapiroW_p.valor <- c(pval_all$p.value, pval_blanco$p.value, pval_tinto$p.value)
+Datos <- c('todos','subset blanco', 'subset tinto')
+
+# Imprimo resultados de normalidad multivariada total y por grupos (estos últimos son relevantes)
+kable(cbind(Datos,ShapiroW_p.valor))
+```
+
+##### Analizo igualdad de matrices de varianzas y covarianzas con boxM
+
+```{r}
+
+p.valor <- boxM(data = df_svm[, 1:12], grouping = df_svm$variedad)$p.value
+Test <- boxM(data = df_svm[, 1:12], grouping = df_svm$variedad)$method
+
+# Imprimo resultados de test
+kable(cbind(Test, p.valor))
+```
+
+##### Como boxM es sensible a la falta de normalidad, aplico Levene utilizando betadisper del paquete "vegan" (equivalente a levene, pero multivariado)
+
+```{r}
+
+matriz_de_distancias <- vegan::betadisper(dist(df_svm[, 1:12], method='euclidean'), df_svm$variedad, type = c("median","centroid"), bias.adjust = T,sqrt.dist = FALSE, add = FALSE)
+```
+
+```{r}
+test_levene <- anova(matriz_de_distancias)
+p.valor <- test_levene$`Pr(>F)`[1]
+TukeyHSD(matriz_de_distancias)
+```
+
+```{r}
+ #plot(matriz_de_distancias)
+Test <- 'Levene'
+
+# Imprimo resultado del test
+kable(cbind(Test,p.valor))
+
+```
+
+##### Analizo cómo me da Hotelling para ver diferencias en el vector de medias de cada grupo
+
+```{r}
+
+HOTELLING <- HotellingsT2Test(as.matrix(df_svm[,-c(13)]) ~ variedad, data =df_svm)
+Test <- HOTELLING$method
+p.valor <- HOTELLING$p.value[1]
+
+# Imprimo resultados en una tabla
+kable(cbind(Test, p.valor ))
+```
+
+```{r}
+# se utiliza el paquete npmv no paramétrico para comparar vector de medias. (Nonparametric Inference for Multivariate Data: R Package npmv, January 2017, Volume 76, Issue 4. doi: 10.18637/jss.v076.i04, https://www.jstatsoft.org/article/view/v076i04)
+# => Agregar todas las variables
+#noparam <- nonpartest(pH | calidad | densidad | alcohol | sulfatos | cloruros ~ variedad, data = df_svm, permreps = 1000, plots=F) 
+noparam <- nonpartest(  acidez_fija | acidez_volatil | acido_citrico | azucar_residual | cloruros | anhidrido_sulfuroso_libre | anhidrido_sulfuroso_total | densidad | pH | sulfatos | alcohol | calidad ~ variedad, data = df_svm, permreps = 1000, plots=F) 
+p.valor <- noparam$results$`P-value`[1]
+Test <- 'No paramétrico multivariado (npmv)'
+
+# Imprimo el resultado
+kable(cbind(Test, p.valor ))
+```
+
+##### Separo conjunto de entrenamiento y prueba para una posterior predicción evitando resultado sobreajustados solo sobre el conjunto de entrenamiento
+
+```{r}
+
+set.seed(661) # para asegurar reproducibilidad
+dt = sort(sample(nrow(df_svm), nrow(df_svm)*.8))
+datos_train_svm<-df_svm[dt,]
+datos_test_svm<-df_svm[-dt,]
+
+```
+
+##### Se realiza el escalado/estandarización con ->  (x - mean(x)) / sd(x)
+
+```{r}
+# Se realiza el escalado/estandarización con ->  (x - mean(x)) / sd(x)
+
+# Calculo media y sd de subconjunto de entrenamiento (train), y con esos datos hago el escalado del test. La idea de escalar el conjunto de test (prueba) utilizando datos solamente de train es para evitar el data leakeage.
+
+# Hago escalado a mano del test set con media del training, y sd del training
+for (k in 1:12){
+  datos_test_svm[,k]=round(print(datos_test_svm[,..k]-colMeans(datos_test_svm[,..k]))/sd(unlist(datos_train_svm[,..k])),2)
+}
+# Hago automáticamente con la función scale, el escalado de training
+datos_train_svm = as.data.frame(scale(datos_train_svm[,1:12]))
+datos_train_svm$variedad <- df_svm[dt,]$variedad
+# y las pongo en = orden que testset
+# creo una única df con todos los datos escalados (que usaré luego para clustering)
+datos_escalados <- as.data.frame(scale(df_svm[,1:12]))
+datos_escalados$variedad <- df_svm$variedad
+
+```
+
+##### Defino modelo SVM lineal, separo los conjuntos de datos para entrenamiento y prueba, recolecto las métricas que me ayudaran a sacar conclusiones sobre las predicciones y grafico la curva ROC
+
+```{r}
+
+# Defino modelo SVM => Tengo que agregar todas las columnas
+sample_svn_tr = datos_train_svm[,1:13]
+sample_svn_te = datos_test_svm[,1:13]
+
+set.seed(661)
+task = makeClassifTask(data = sample_svn_tr, target = "variedad") 
+lrn_svm1 = makeLearner("classif.svm", predict.type = "prob", par.vals = list( kernel = "linear", cost=2)) 
+mod_svm1 = mlr::train(lrn_svm1, task)
+
+# Predicción TEST
+pred_svm1= predict(mod_svm1, newdata = sample_svn_te)
+acc_svm1 <- round(measureACC(pred_svm1$data$truth, pred_svm1$data$response),3)
+AUC_svm1_te <- round(measureAUC(as.data.frame(pred_svm1)$prob.2,as.data.frame(pred_svm1)$truth,1,2),3)
+
+# ···························································································
+# Predicción TRAIN (naive)
+pred_svm_1 = predict(mod_svm1, newdata = sample_svn_tr) # para comparar con set de test
+acc_svm_1 <- round(measureACC(as.data.frame(pred_svm_1)$truth, as.data.frame(pred_svm_1)$response),3)
+AUC_svm1_tr <- round(measureAUC(as.data.frame(pred_svm_1)$prob.2,as.data.frame(pred_svm_1)$truth, 1,2),3)
+
+#print(sample_svn_tr)
+# ···························································································
+# Cambio el threshold [esto lo hago para train y test]
+acc=NULL
+acc2=NULL
+threshold = seq(0.1,0.95,0.01)
+for (i in 1:length(threshold)) {
+        pred = setThreshold(pred_svm1, threshold = threshold[i])
+        acc[i] = measureACC(as.data.frame(pred)$truth, as.data.frame(pred)$response)}
+for (i in 1:length(threshold)) {
+        pred2 = setThreshold(pred_svm_1, threshold = threshold[i])
+        acc2[i] = measureACC(as.data.frame(pred2)$truth, as.data.frame(pred2)$response)}
+par(mfrow = c(2,5))
+
+new_df1 <- as.data.frame(cbind(threshold,acc))
+new_df1 <- new_df1%>%mutate(sub_data='test')
+new_df2 <- as.data.frame(cbind(threshold,acc2))
+colnames(new_df2) <- c('threshold','acc')
+new_df2 <- new_df2%>%mutate(sub_data='train')
+
+new_df <- as.data.frame(rbind(new_df1,new_df2))
+
+#new_df1[which.max(new_df1$acc),"threshold"] 
+#new_df2[which.max(new_df2$acc),"threshold"] 
+# ···························································································
+# Gráfico de cómo varía la métrica de performance accuracy, de acuerdo al umbral elegido
+ggplot(new_df, aes(x=threshold, y=acc)) + geom_line(aes(color = sub_data,linetype=sub_data)) +
+        theme +labs(x='Umbral', y='Métrica de performance (accuracy)', 
+                     title= 'Evaluación del modelo de Máquinas de soporte vectorial SVM') +
+        scale_color_manual(values = c("red", "darkred"),labels=c('prueba','entrenamiento')) +
+        scale_linetype_manual(values=c(1,2), labels=c('prueba','entrenamiento')) + 
+        labs(color='Conjunto de\n evaluación',linetype='Conjunto de\n evaluación')
+
+```
+
+#Representamos la matriz de confusion para poder hacer un analisis de las diferentes metricas sobre la prediccion
+
+```{r}
+#install.packages("caret")
+library(caret)
+
+confusionMatrix(as.data.frame(pred_svm1)$truth, as.data.frame(pred_svm1)$response)
+
+```
+
+
+##### Para independizarnos de la elección del umbral, grafico curvas ROC para las predicciones del modelo SVM con los datos de Entrenamiento y Prueba
+
+```{r}
+df_svm_threshold = generateThreshVsPerfData(list(svm_te = pred_svm1, svm_tr = pred_svm_1), 
+                                  measures = list(fpr, tpr, mmce))
+
+plotROCCurves(df_svm_threshold) + theme +
+        labs(title='Curva ROC del modelo de Máquinas de soporte vectorial SVM kernel lineal', 
+             x='Tasa de falsos positivos (FPR)', y='Tasa de positivos verdaderos (TPR)',
+             color='Conjunto de\n evaluación') +
+        scale_color_manual(values = c("red", "darkred"), labels=c('prueba','entrenamiento')) +
+        geom_label(label='AUC test', x=0.35, y=0.75, label.size = 0.3, size=4,
+                   color = "red",fill="white") + 
+        geom_label(label='AUC train',x=0.07, y=0.97, label.size = 0.3, size=4,
+                   color = "darkred",fill="white")
+```
+
+```{r}
+# ················ Métricas del modelo de SVM ················
+Métrica <- c('valor','datos')
+Accuracy <- c(acc_svm1,'prueba')
+Accuracy. <- c(acc_svm_1,'entrenamiento')
+AUC_ROC <- c(AUC_svm1_te,'prueba')
+AUC_ROC. <- c(AUC_svm1_tr,'entrenamiento')
+# Imprimo resultados
+kable(rbind(Métrica, Accuracy, Accuracy., AUC_ROC, AUC_ROC.))
+```
+
+##### Buscando un modelo más robusto, defino modelo SVM radial, separo los conjuntos de datos para entrenamiento y prueba, recolecto las métricas que me ayudarán a sacar conclusiones sobre las predicciones y grafico la curva ROC
+
+```{r}
+
+# Defino modelo SVM radial
+
+sample_svn_tr_radial = datos_train_svm[,1:13]
+sample_svn_te_radial = datos_test_svm[,1:13]
+
+set.seed(661)
+task = makeClassifTask(data = sample_svn_tr_radial, target = "variedad") 
+lrn_svm3 = makeLearner("classif.svm", predict.type = "prob", par.vals = list( kernel = "radial", cost=2)) 
+mod_svm3 = mlr::train(lrn_svm3, task)
+# Predicción TEST
+pred_svm3= predict(mod_svm3, newdata = sample_svn_te_radial)
+acc_svm3 <- round(measureACC(pred_svm3$data$truth, pred_svm3$data$response),3)
+AUC_svm3_te <- round(measureAUC(as.data.frame(pred_svm3)$prob.2,as.data.frame(pred_svm3)$truth,1,2),3)
+# ···························································································
+# Predicción TRAIN (naive)
+pred_svm_3 = predict(mod_svm3, newdata = sample_svn_tr_radial) # por si quiero ver naive sobre training
+acc_svm_3 <- round(measureACC(as.data.frame(pred_svm_3)$truth, as.data.frame(pred_svm_3)$response),3)
+AUC_svm3_tr <- round(measureAUC(as.data.frame(pred_svm_3)$prob.2,as.data.frame(pred_svm_3)$truth, 1,2),3)
+# ···························································································
+# Cambio el threshold [esto lo hago para train y test]
+acc=NULL
+acc2=NULL
+threshold = seq(0.1,0.95,0.01)
+for (i in 1:length(threshold)) {
+        pred = setThreshold(pred_svm3, threshold = threshold[i])
+        acc[i] = measureACC(as.data.frame(pred)$truth, as.data.frame(pred)$response)}
+for (i in 1:length(threshold)) {
+        pred2 = setThreshold(pred_svm_3, threshold = threshold[i])
+        acc2[i] = measureACC(as.data.frame(pred2)$truth, as.data.frame(pred2)$response)}
+par(mfrow = c(2,5))
+
+new_df1 <- as.data.frame(cbind(threshold,acc))
+new_df1 <- new_df1%>%mutate(sub_data='test')
+new_df2 <- as.data.frame(cbind(threshold,acc2))
+colnames(new_df2) <- c('threshold','acc')
+new_df2 <- new_df2%>%mutate(sub_data='train')
+
+new_df <- as.data.frame(rbind(new_df1,new_df2))
+
+#new_df1[which.max(new_df1$acc),"threshold"] 
+#new_df2[which.max(new_df2$acc),"threshold"] 
+# ···························································································
+# Gráfico de cómo varía la métrica de performance accuracy, de acuerdo al umbral elegido
+ggplot(new_df, aes(x=threshold, y=acc)) + geom_line(aes(color = sub_data,linetype=sub_data)) +
+        theme +labs(x='Umbral', y='Métrica de performance (accuracy)', 
+                     title= 'Evaluación del modelo de Máquinas de soporte vectorial SVM') +
+        scale_color_manual(values = c("red", "darkred"),labels=c('prueba','entrenamiento')) +
+        scale_linetype_manual(values=c(1,2), labels=c('prueba','entrenamiento')) + 
+        labs(color='Conjunto de\n evaluación',linetype='Conjunto de\n evaluación')
+
+```
+
+```{r}
+# Para independizarnos de la elección del umbral, grafico curvas ROC para las predicciones del modelo SVM con los datos de TEST y TRAIN
+df_svm_threshold_radial = generateThreshVsPerfData(list(svm_te = pred_svm3, svm_tr = pred_svm_3), 
+                                  measures = list(fpr, tpr, mmce))
+
+plotROCCurves(df_svm_threshold_radial) 
+```
+```{r}
+confusionMatrix(as.data.frame(pred_svm3)$truth, as.data.frame(pred_svm3)$response)
+
+```
+
+```{r}
+# ················ Métricas del modelo de SVM ················
+Métrica <- c('valor','datos')
+Accuracy <- c(acc_svm3,'prueba')
+Accuracy. <- c(acc_svm_3,'entrenamiento')
+AUC_ROC <- c(AUC_svm3_te,'prueba')
+AUC_ROC. <- c(AUC_svm3_tr,'entrenamiento')
+# Imprimo resultados
+kable(rbind(Métrica, Accuracy, Accuracy., AUC_ROC, AUC_ROC.))
+```
+
+
+##### Realizo una comparación de las predicciones realizadas por ambos métodos SVM en contraste con la evaluación de componentes principales generadas anteriormente
+
+```{r}
+
+SVM_metrics1 <- calculateROCMeasures(pred_svm1)
+SVM_metrics3 <- calculateROCMeasures(pred_svm3)
+
+# Ingenua para ver cómo le va 
+pred_todos=NULL
+pred_todos_svm1 <- as.data.frame(predict(mod_svm1, newdata = datos_escalados[-13]))
+pred_todos_svm3 <- as.data.frame(predict(mod_svm3, newdata = datos_escalados[-13]))
+
+# ······················ PCA datos originales ··················································
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1,alpha=0.5,groups=factor(df_pca$variedad)) +
+        scale_color_manual(name="variedad", values=c('royalblue2','#ff7474ff'),
+                           labels=c("blanco","tinto")) +
+        theme + labs(
+        title= 'Representación de las etiquetas reales\nen las componentes principales 1 y 2')+
+        theme(legend.position=c(.865,.15))
+
+# ······················ PCA + predicciones SVM lineal (modelo 1) ·······························
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1,alpha=.5,groups=factor(pred_todos_svm1$response)) +
+        scale_color_manual(name="Predicción", values=c('royalblue2','#ff7474ff'),
+                           labels=c("blanco","tinto")) +
+        theme + labs(title= 'Representación de las predicciones ingenuas del modelo SVM (l)\nen las componentes principales 1 y 2') +
+        theme(legend.position=c(.865,.15))
+
+
+# ······················ PCA + predicciones SVM radial (modelo 3) ·······························
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1,alpha=.5,groups=factor(pred_todos_svm3$response)) +
+        scale_color_manual(name="Predicción", values=c('royalblue2','#ff7474ff'),
+                           labels=c("blanco","tinto")) +
+        theme + labs(title= 'Representación de las predicciones ingenuas del modelo SVM (r)\nen las componentes principales 1 y 2') +
+        theme(legend.position=c(.865,.15))
+```
+
+```{r}
+# ······················ curvas ROC para todos los modelos ········································
+df_todos = generateThreshVsPerfData(list(svm1 = pred_svm1,
+                                         svm3 = pred_svm3), measures = list(fpr, tpr, mmce))
+
+plotROCCurves(df_todos) + theme + 
+        labs(title='Curvas ROC de modelos de clasificación supervisada (datos de prueba)',
+             x='Tasa de falsos positivos (FPR)', y='Tasa de positivos verdaderos (TPR)', 
+             color=' Modelo en\n evaluación') +
+        scale_color_manual(values = c("red", "black"),
+                           labels=c('SVM (l)','SVM (r)'))+
+        theme(legend.position=c(0.915,0.25))
+```
+
+> Conclusiones
+> Podemos determinar a partir del análisis realizado, de que para este caso, SVM está realizando una separación muy precisa de los datos llegando a una precisión por encima del 99% tanto en el conjunto de prueba, como de validación
+>
+> Como mencionamos anteriormente los supuestos no se cumplen por lo que no podemos asegurar que los resultados sean totalmente confiables
+>
+> Por otro lado, los porcentajes de comparacion entre prueba y entrenamiento son sospechosamente altos, por lo que podriamos pensar que se esta generando un sobreajuste a pesar de separar el conjunto de datos en entretamiento y prueba
+>
+> Sería adecuado poder hacer este análisis con un conjunto de datos mucho mayor, para poder tener una mayor confiabilidad en el modelo
+>
+> Casualmente dan iguales o mejores resultados en el conjunto de prueba que en el de entrenamiento, considero que esto se da por la alta precisión del modelo y la baja cantidad de datos para probar
+
+#### 4.- Elija un método de Clasificación jerárquico y aplíquelo a los datos. Interprete los resultados.
+
+##### Elijo un subset de 1000 datos para realizar el dendograma y utilizo todos los atributos del mismo para su el método de clasificación jerárquico, virifico que los subsets esten balanceados
+
+```{r}
+df_clustering = sample_data
+cantidad_clusters=2
+set.seed(661)
+par(mfcol = c(1,1))
+data_c_diag = df_clustering[-c(13)] # 
+sample_cluster1 <- data_c_diag[sample(1:nrow(data_c_diag), 1000,replace=FALSE),]
+sample_cluster <- as.data.frame(scale(sample_cluster1[,1:12]))
+sample_cluster$variedad <- sample_cluster1$variedad
+
+# Imprimo cuántos valores hay en cada categoría de la variable diagnóstico en mi muestra de n=100
+kable(table(sample_cluster$variedad))
+```
+
+##### Escogemos la distancia euclidea para realizar la matriz de distancias, y luego comparamos los diferentes métodos de distancias entre grupos para quedarnos con el más adecuado
+```{r}
+# Escalo los datos y hago PCA
+df_sample_cluster = sample_cluster[-13]
+df_sample_cluster_pca <-df_sample_cluster %>% dplyr::select(is.numeric)
+df_clustering.pc2 = prcomp(df_sample_cluster_pca,scale = TRUE)
+# Matriz de distancias euclídeas 
+mat_dist <- dist(x = df_sample_cluster, method = "euclidean") 
+# Dendrogramas (según el tipo de segmentación jerárquica aplicada)  
+hc_complete <- hclust(d = mat_dist, method = "complete") 
+hc_average  <- hclust(d = mat_dist, method = "average")
+hc_single   <- hclust(d = mat_dist, method = "single")
+hc_ward     <- hclust(d = mat_dist, method = "ward.D2")
+
+```
+
+##### Calculo el coeficiente de correlación cofenético saber con que método avanzar
+```{r}
+#Calculo del coeficiente de correlacion cofenetico
+completo <- round(cor(x = mat_dist, cophenetic(hc_complete)),3)
+promedio <- round(cor(x = mat_dist, cophenetic(hc_average)),3)
+simple <- round(cor(x = mat_dist, cophenetic(hc_single)),3)
+ward <- round(cor(x = mat_dist, cophenetic(hc_ward)),3)
+valores_coef <- cbind(completo,promedio,simple,ward)
+
+# Imprimo valores de coeficiente cofenético
+kable(valores_coef)
+```
+
+
+##### A pesar de que el mayor índice cofenético lo arrojo el método promedio, clusterizamos con los otros tres para poder comparar los dendogramas
+```{r}
+# Armo clusters
+jer_ward<-cutree(hc_ward,k=cantidad_clusters)           
+jer_average<-cutree(hc_average,k=cantidad_clusters)      
+jer_complete<-cutree(hc_complete,k=cantidad_clusters)           
+jer_single<-cutree(hc_single,k=cantidad_clusters)     
+# Agrego cluster a dataframe
+sample_cluster$jer_ward=jer_ward
+sample_cluster$jer_average=jer_average
+sample_cluster$jer_complete=jer_complete
+sample_cluster$jer_single=jer_single
+```
+
+```{r}
+mar = c(5.1, 4.1, 4.1, 2.1) 
+pch=c('royalblue2','#ff7474ff') 
+cols=alpha(pch[sample_cluster$variedad[order.dendrogram(as.dendrogram(hc_ward))]],0.7)
+dend_ward <- color_branches(as.dendrogram(hc_ward), k = 2)
+dend_ward <- set(dend_ward, "labels_cex", 0.1)
+grafico1 <- dend_ward %>%  set("leaves_pch",19)%>%
+        set("leaves_cex", .9) %>% set("leaves_col", cols) %>% 
+        plot(main = "Dendrograma jerárquico", ylab='Distancia',cex.lab=1, cex.axis=.6)+
+        mtext(side = 3, line = 0.5, at = 1, adj = -1.8, 'Distancia Ward')+
+        mtext(side = 1, line = 0.5, at = 1, adj = -4.1, 'Vinos')
+legend(5,28, title='Variedad', 
+     legend = c("blanco" , "tinto"), 
+     col = c('royalblue2','#ff7474ff') , 
+     pch = c(19,19), bty = "n",  pt.cex = 1.5, cex = 0.8 , 
+     text.col = "black", horiz = FALSE, inset = c(0, 0.1))
+```
+
+```{r}
+cols_a=alpha(pch[sample_cluster$variedad[order.dendrogram(as.dendrogram(hc_average))]],0.7)
+dend_average <- color_branches(as.dendrogram(hc_average), k = 2)
+dend_average <- set(dend_average, "labels_cex", 0.1)
+grafico2 <- dend_average %>% set("leaves_pch",19) %>%  
+        set("leaves_cex", .8) %>%  set("leaves_col", cols_a) %>% 
+        plot(main = "Dendrograma jerárquico",  ylab='Distancia',cex.lab=1, cex.axis=.6)+
+        mtext(side = 3, line = 0.5, at = 1, adj = -1.3, 'Distancia Promedio')+
+        mtext(side = 1, line = 0.5, at = 1, adj = -4.1, 'Vinos')
+legend(76,8, title='Variedad', 
+     legend = c("blanco" , "tinto"), 
+     col = c('royalblue2','#ff7474ff') , 
+     pch = c(19,19), bty = "n",  pt.cex = 1.5, cex = 0.8 , 
+     text.col = "black", horiz = FALSE, inset = c(0, 0.1))
+```
+
+```{r}
+cols_c=alpha(pch[sample_cluster$variedad[order.dendrogram(as.dendrogram(hc_complete))]],0.7)
+dend_complete <- color_branches(as.dendrogram(hc_complete), k = 2)
+dend_complete <- set(dend_complete, "labels_cex", 0.1)
+grafico3 <- dend_complete %>% set("leaves_pch",19) %>%  # node point type
+        set("leaves_cex", .8) %>%  # node point size
+        set("leaves_col", cols_c) %>% #node point color
+        plot(main = "Dendrograma jerárquico", ylab='Distancia',cex.lab=1, cex.axis=.6)+
+        mtext(side = 3, line = 0.5, at = 1, adj = -1.3, 'Distancia Completa')+
+        mtext(side = 1, line = 0.5, at = 1, adj = -4.1, 'Vinos')
+legend(85,16, title='Diagnóstico', 
+     legend = c("blanco" , "tinto"), 
+     col = c('royalblue2','#ff7474ff') , 
+     pch = c(19,19), bty = "n",  pt.cex = 1.5, cex = 0.8 , 
+     text.col = "black", horiz = FALSE, inset = c(0, 0.1))
+```
+
+```{r}
+cols_s=alpha(pch[sample_cluster$variedad[order.dendrogram(as.dendrogram(hc_single))]],0.7)
+dend_single <- color_branches(as.dendrogram(hc_single), k = 2)
+dend_single <- set(dend_single, "labels_cex", 0.1)
+grafico4 <- dend_single %>% set("leaves_pch",19) %>%  # node point type
+        set("leaves_cex", .8) %>%  # node point size
+        set("leaves_col", cols_s) %>% #node point color
+        plot(main = "Dendrograma jerárquico", ylab='Distancia',cex.lab=1, cex.axis=.7)+
+        mtext(side = 3, line = 0.5, at = 1, adj = -1.7, 'Distancia Simple')+
+        mtext(side = 1, line = 0.5, at = 1, adj = -4.1, 'Vinos')
+legend(80,7, title='Variedad', 
+     legend = c("blanco" , "tinto"), 
+     col = c('royalblue2','#ff7474ff') , 
+     pch = c(19,19), bty = "n",  pt.cex = 1.5, cex = 0.8 , 
+     text.col = "black", horiz = FALSE, inset = c(0, 0.1))
+
+```
+
+```{r}
+# ·····················································
+# cuántos pacientes de cada diagnóstico están en cada cluster:
+ward_cluster1 <- sample_cluster %>% filter (jer_ward == '1')
+cluster1 <- table(ward_cluster1$variedad)
+Ward_cluster.1 <- round(prop.table(cluster1)*100,2)
+# ·····················································
+ward_cluster2 <- sample_cluster %>% filter (jer_ward == '2')
+cluster2 <- table(ward_cluster2$variedad)
+Ward_cluster.2 <- round(prop.table(cluster2)*100,2)
+
+kable(cbind(rbind(cluster1,cluster2),rbind(Ward_cluster.1,Ward_cluster.2)))
+```
+
+```{r}
+# ·····················································
+promedio_cluster1 <- sample_cluster %>% filter (jer_average == '1')
+cluster1 <- table(promedio_cluster1$variedad)
+promedio_cluster.1 <- round(prop.table(cluster1)*100,2)
+# ·····················································
+promedio_cluster2 <- sample_cluster %>% filter (jer_average == '2')
+cluster2 <- table(promedio_cluster2$variedad)
+promedio_cluster.2 <- round(prop.table(cluster2)*100,2)
+
+kable(cbind(rbind(cluster1,cluster2),rbind(promedio_cluster.1,promedio_cluster.2)))
+```
+
+```{r}
+# ·····················································
+completo_cluster1 <- sample_cluster %>% filter (jer_complete == '1')
+cluster1 <- table(completo_cluster1$variedad)
+completo_cluster.1 <- round(prop.table(cluster1)*100,2)
+# ·····················································
+completo_cluster2 <- sample_cluster %>% filter (jer_complete == '2')
+cluster2 <- table(completo_cluster2$variedad)
+completo_cluster.2 <- round(prop.table(cluster2)*100,2)
+
+kable(cbind(rbind(cluster1,cluster2),rbind(completo_cluster.1,completo_cluster.2)))
+```
+
+```{r}
+# ·····················································
+simple_cluster1 <- sample_cluster %>% filter (jer_single == '1')
+cluster1 <- table(simple_cluster1$variedad)
+simple_cluster.1 <- round(prop.table(cluster1)*100,2)
+# ·····················································
+simple_cluster2 <- sample_cluster %>% filter (jer_single == '2')
+cluster2 <- table(simple_cluster2$variedad)
+simple_cluster.2 <- round(prop.table(cluster2)*100,2)
+
+
+kable(cbind(rbind(cluster1,cluster2),rbind(simple_cluster.1,simple_cluster.2)))
+```
+
+
+> Conclusiones
+> Como resultado del análisis de clasificación realizada utilizando diferentes tipos de segmentación jerárquica, determinamos que a pesar de que el cálculo del coeficiente de correlación cofenético nos arrojo con mayor valor al tipo promedio, ejecutando el denograma de cada uno vemos que claramente el que mejor realiza la separación de clusteres es el tipo ward, arrojando resultados muchísimos mejores que el resto
+>
+> 1	2	1	2
+cluster1	32	490	6.13	93.87
+cluster2	471	7	98.54	1.46
+>
+> Limito el numero de clusters por el costo computacional
+
+#### 5.- Aplique a los datos el método de clasificación no jerárquico K-means. Interprete los resultados.
+
+##### Realizamos el análisis correspondiente para elegir la cantidad de clusters a calcular con kmeans. Graficamos las métricas SIL y SSE
+```{r}
+
+#datos_para_kmeans = sample_data[1:12]
+df_kmeans = sample_data
+datos_para_kmeans <- sample_data %>% dplyr::select(is.numeric)
+
+#analisis de la cantidad de clusters. Este primer bloque es solo para definir funciones.
+#se define una funcion para calcular metricas que orientan sobre el numero de clusters a elegir para el problema.
+metrica = function(datA_esc,kmax,f) {
+        sil = array()
+        sse = array()
+        datA_dist= dist(datA_esc,method = "euclidean", diag = FALSE, upper = FALSE, p = 2)
+        for ( i in  2:kmax) { if (strcmp(f,"kmeans")==TRUE) {   #centroide: tipico kmeans
+                        CL  = kmeans(datA_esc,centers=i,nstart=50,iter.max = kmax)
+                        sse[i]  = CL$tot.withinss 
+                        CL_sil = silhouette(CL$cluster, datA_dist)
+                        sil[i]  = summary(CL_sil)$avg.width}
+                if (strcmp(f,"pam")==TRUE){       #medoide: ojo porque este metodo tarda muchisimo 
+                        CL = pam(x=datA_esc, k=i, diss = F, metric = "euclidean")
+                        sse[i]  = CL$objective[1] 
+                        sil[i]  = CL$silinfo$avg.width}}
+        sse
+        sil
+        return(data.frame(sse,sil))}
+#en este bloque se estudia cuantos clusters convendría generar segun indicadores tipicos -> por ejemplo el "Silhouette"
+kmax = 10
+
+m1   = metrica(scale(datos_para_kmeans),kmax,"kmeans")  #tipica con estimadores de la normal
+m1 <- m1[complete.cases(m1),]
+m1$kcluster <- seq(2,kmax,1)
+m1 <- m1%>%dplyr::select(3,1,2)
+m1_sse <- m1%>%dplyr::select(-3)%>%mutate(metric='SSE')
+colnames(m1_sse) <- c('kcluster','value','metric')
+m1_sil <- m1%>%dplyr::select(-2)%>%mutate(metric='SIL')
+colnames(m1_sil) <- c('kcluster','value','metric')
+m1 <- rbind(m1_sse,m1_sil)
+# Grafico de métricas SIL y SSE
+ggplot(m1, aes(kcluster, value, linetype=metric)) + geom_line(col='red') + 
+        facet_wrap(~metric, ncol=1, scales='free')+theme+geom_point(col='red', size=2, fill='pink', shape=21)+
+        labs(title='Determinación de número de clusters', 
+             x='k Número de clusters', y='Valor', linetype='Métrica')+
+        scale_x_continuous(breaks = seq(1, kmax, by = 1))+
+        scale_linetype_manual(values=c(1,2))
+```
+
+##### A sabiendas que nuestra variable objetivo tiene solo dos categorías, realizamos la clusterización con kmeans = 2, y graficamos los resultados en relación a las variables pH, densidad y calidad.
+```{r}
+set.seed(661)
+cantidad_clusters=2
+
+CL  = kmeans(scale(datos_para_kmeans),cantidad_clusters)
+df_kmeans$kmeans = CL$cluster
+
+# Grafico scatterplot original + cluster con k=2
+par(mfrow=c(1,2))
+# -------------------------------------------------------------------------------------------
+col1 <- c('royalblue2','#ff7474ff')
+col1 <- col1[as.numeric(df_kmeans$variedad)]
+
+scatterplot3d(df_kmeans$pH,df_kmeans$densidad,df_kmeans$calidad, color = alpha(col1,0.3), box=F,angle=45, pch = 19, grid = TRUE, tick.marks = FALSE, xlab = "ph", ylab = "densiidad", zlab = "calidad", main='Realidad')
+#legend("topright", bty = "n", cex = .9, title = "Variedad", c("blanco", "tinto"), fill = c('royalblue2','#ff7474ff'))
+# -------------------------------------------------------------------------------------------
+colors <- c('orange','#a25da2a5')
+colors <- colors[as.numeric(df_kmeans$kmeans)]
+
+scatterplot3d(df_kmeans$pH,df_kmeans$densidad,df_kmeans$calidad, color = alpha(colors,0.3), box=F,angle=45, pch = 19, grid = TRUE, tick.marks = FALSE, xlab = "ph", ylab = "densiidad", zlab = "calidad", main='Clustering')
+#legend("topright", bty = "n", cex = .9, title = "Grupo k-means", c("1", "2"), fill = c('orange','#a25da2a5'))
+```
+
+```{r}
+#conviene en un biplot ya que tengo las flechas de las variables originales
+# GRAFICO ORIGINAL
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1,alpha=0.5,
+         groups=factor(df_kmeans$variedad)) +
+        scale_color_manual(name="variedad",values=c('royalblue2','#ff7474ff'),
+                           labels=c("blanco",'tinto')) +
+        theme + labs(title='Análisis de componentes principales') + 
+        theme(legend.position=c(.85,.15)) + 
+        labs(x='PC1 (51.5% explicado)', y= 'PC2 (22.5% explicado)')
+```
+
+```{r}
+# -------------------------------------------------------------------------------------------
+# GRAFICO KMEANS
+ggbiplot(df_svm.pc, obs.scale=0.1 ,var.scale=1, alpha=0.5,groups = as.factor(df_kmeans$kmeans) )+
+        scale_color_manual(name="Grupo k-means", values=c("orange",'#a25da2a5',"darkgreen"),
+                           labels=c("1", "2","3")) + theme+
+        labs(title= 'Representación del clustering utilizando k-means')+theme(legend.position=c(.85,.15)) 
+```
+
+```{r}
+# ·····················································
+# cuántos pacientes de cada diagnóstico están en cada cluster:
+pacientes_cluster1 <- df_kmeans %>% filter (kmeans == '1')
+cluster1 <- table(pacientes_cluster1$variedad)
+porcentaje_cluster.1 <- round(prop.table(cluster1)*100,2)
+pacientes_cluster2 <- df_kmeans %>% filter (kmeans == '2')
+cluster2 <- table(pacientes_cluster2$variedad)
+porcentaje_cluster.2 <- round(prop.table(cluster2)*100,2)
+# ·····················································
+# Imprimo resultados
+kable(cbind(rbind(cluster1,cluster2),rbind(porcentaje_cluster.1,porcentaje_cluster.2)))
+```
+
+```{r}
+kmeans1 <- df_kmeans %>% filter(kmeans==1)  %>%dplyr::select(c(1:12))%>% colMeans()
+kmeans2 <- df_kmeans %>% filter(kmeans==2)  %>%dplyr::select(c(1:12))%>% colMeans()
+blanco <- df_kmeans %>%filter(variedad=='1') %>%dplyr::select(c(1:12))%>% colMeans()
+tinto <- df_kmeans %>%filter(variedad=='2') %>%dplyr::select(c(1:12))%>% colMeans()
+# Imprimo resultados
+kable(rbind(kmeans1,blanco,kmeans2,tinto))
+```
+
+```{r}
+# ya sabíamos del qqplot que las variables no son normales univariadas (si se separan por diagnóstico). por TLC, no obstante, uno puede aproximar las univariadas y hacer un test acorde para ver diferencias de medias
+
+blanco_N <- df_kmeans%>%filter(variedad=='1')
+tinto_M <- df_kmeans%>%filter(variedad=='2')
+
+pH <- z.test(blanco_N$pH, sigma.x=sd(blanco_N$pH), tinto_M$pH, sigma.y=sd(tinto_M$pH), conf.level=0.95)$p.value
+densidad <- z.test(blanco_N$densidad, sigma.x=sd(blanco_N$densidad), tinto_M$densidad, sigma.y=sd(tinto_M$densidad), conf.level=0.95)$p.value
+calidad <- z.test(blanco_N$calidad, sigma.x=sd(blanco_N$calidad), tinto_M$calidad, sigma.y=sd(tinto_M$calidad), conf.level=0.95)$p.value
+
+blanco_1 <- df_kmeans%>%filter(kmeans=='1')
+tinto_2 <- df_kmeans%>%filter(kmeans=='2')
+
+pH_c <- z.test(blanco_1$pH, sigma.x=sd(blanco_1$pH), tinto_2$pH, sigma.y=sd(tinto_2$pH), conf.level=0.95)$p.value
+densidad_c <- z.test(blanco_1$densidad, sigma.x=sd(blanco_1$densidad), tinto_2$densidad, sigma.y=sd(tinto_2$densidad), conf.level=0.95)$p.value
+calidad_c <- z.test(blanco_1$calidad, sigma.x=sd(blanco_1$calidad), tinto_2$calidad, sigma.y=sd(tinto_2$calidad), conf.level=0.95)$p.value
+
+variable <- c('variedad','cluster')
+# Imprimo resultados
+kable(rbind(variable,cbind(rbind(pH, densidad, calidad),rbind(pH_c, densidad_c, calidad_c))))
+```
+
+
+```{r}
+
+#datos_para_kmeans = sample_data[1:12]
+df_kmeans_4 = sample_data
+datos_para_kmeans_4 <- sample_data %>% dplyr::select(is.numeric)
+
+# ENTRENO K MEANS CON K=3
+cantidad_clusters_4=4
+set.seed(661)
+CL_4  = kmeans(scale(datos_para_kmeans_4),cantidad_clusters_4)
+df_kmeans_4$kmeans = CL_4$cluster
+colors2 <- c('orange','#a25da2a5', 'darkgreen','lightblue')
+colors2 <- colors2[as.numeric(df_kmeans_4$kmeans)]
+# -------------------------------------------------------------------------------------------
+# GRAFICO K=3
+scatterplot3d(df_kmeans_4$pH,df_kmeans_4$densidad,df_kmeans_4$calidad, color = alpha(colors2,0.3), box=F,angle=25, pch = 19, grid = TRUE, tick.marks = FALSE, xlab = "pH", ylab = "densidad", zlab = "calidad", main='Clustering k=4', cex.lab=.8,scale.y=2, cex.symbols=1.3)
+legend(x=4, y=5.5, bty = "n", cex = 1.1, title = "Grupo k-means", c("1", "2","3","4"), fill = c('orange','#a25da2a5', 'darkgreen','lightblue'))
+
+```
+
+```{r}
+# ·····················································
+# cuántos pacientes de cada diagnóstico están en cada cluster:
+pacientes_cluster1_4 <- df_kmeans_4 %>% filter (kmeans == '1')
+cluster1_4 <- table(pacientes_cluster1_4$variedad)
+porcentaje_cluster_4.1 <- round(prop.table(cluster1_4)*100,2)
+pacientes_cluster2_4 <- df_kmeans_4 %>% filter (kmeans == '2')
+cluster2_4 <- table(pacientes_cluster2_4$variedad)
+porcentaje_cluster_4.2 <- round(prop.table(cluster2_4)*100,2)
+
+pacientes_cluster3_4 <- df_kmeans_4 %>% filter (kmeans == '3')
+cluster3_4 <- table(pacientes_cluster3_4$variedad)
+porcentaje_cluster_4.3 <- round(prop.table(cluster3_4)*100,2)
+pacientes_cluster4_4 <- df_kmeans_4 %>% filter (kmeans == '4')
+cluster4_4 <- table(pacientes_cluster4_4$variedad)
+porcentaje_cluster_4.4 <- round(prop.table(cluster4_4)*100,2)
+
+# ·····················································
+# Imprimo resultados
+kable(cbind(rbind(cluster1_4,cluster2_4,cluster3_4,cluster4_4),rbind(porcentaje_cluster_4.1,porcentaje_cluster_4.2,porcentaje_cluster_4.3,porcentaje_cluster_4.4)))
+```
+
+```{r}
+kmeans_41 <- df_kmeans_4 %>% filter(kmeans==1)  %>%dplyr::select(c(1:12))%>% colMeans()
+kmeans_42 <- df_kmeans_4 %>% filter(kmeans==2)  %>%dplyr::select(c(1:12))%>% colMeans()
+kmeans_43 <- df_kmeans_4 %>% filter(kmeans==3)  %>%dplyr::select(c(1:12))%>% colMeans()
+kmeans_44 <- df_kmeans_4 %>% filter(kmeans==4)  %>%dplyr::select(c(1:12))%>% colMeans()
+
+blanco <- df_kmeans_4 %>%filter(variedad=='1') %>%dplyr::select(c(1:12))%>% colMeans()
+tinto <- df_kmeans_4 %>%filter(variedad=='2') %>%dplyr::select(c(1:12))%>% colMeans()
+# Imprimo resultados
+kable(rbind(kmeans_41,kmeans_42,kmeans_43,kmeans_44,blanco,tinto))
+```
+
+> Conclusiones
+> Ejecutamos el modelo k means con el conjunto de datos, para esto en primer lugar realizamos el análisis correspondiente para elegir la cantidad de clusters a calcular. para esto calculamos las métricas Silhouette y SSE, obtenemos que el conjunto de datos seria bueno evaluarlo con 4, 5 clusters, sabiendo que nuestra variable target a dividir tan solo tiene dos categorías, continuamos la implementación con k means = 2 y k means = 4 para comparar resultados.
+Graficando un biplot con lo resuelto por K = 2 vemos que genera dos grupos muy marcados, donde no hay prácticamente un solapamiento entre ambos lo que sí sucede conjunto original, por el contrario con K = 4, si vemos que las fronteras entre los grupos comienzan a solaparse, por lo que con un análisis más profundo, la agrupación de varios clusters a través del análisis de sus medias podría brindar una imagen más acorde a la realidad. En este caso, observamos que k means = 1 y k means = 4 tienen medias muy similares, que podríamos asociarlas a la distribución de vino blanco.
+
+>
+
+
+
+#### C.- Presente un informe final de 2 carillas como máximo, no incluya gráficos, explicando las conclusiones del trabajo realizado, mencione si es necesario validar supuestos requeridos para aplicar el método. Compare los resultados de los métodos supervisados y establezca conclusiones. Por otro lado, compare los métodos no supervisados y presente sus conclusiones.
+
+#### D.- Realice el trabajo en R y adjunte el código en R, el RMD y el html donde se puede observar el código y las salidas junto con la interpretación de cada método.

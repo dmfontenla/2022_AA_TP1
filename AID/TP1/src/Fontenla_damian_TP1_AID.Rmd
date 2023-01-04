@@ -1,0 +1,674 @@
+---
+title: "Trabajo práctico AID C1 2022"
+author: "Damián Fontenla"
+output: html_document
+date: '2022-05-10'
+---
+
+```{r setup, include=FALSE}
+
+#install.packages("readxl",repos = "http://cran.us.r-project.org")
+#install.packages("modeest") 
+#install.packages("moments")
+#install.packages('epiDisplay')
+#install.packages("dplyr", repo="http://cran.r-project.org",dep=TRUE)
+#install.packages("freqtables")
+#install.packages("remotes")
+#remotes::install_github("angeloSdP/ULPGCmisc")
+#install.packages("data.table")                  # Install & load data.table
+#install.packages("reshape2")                  # Install & load data.table
+#install.packages("ggplot2")
+#install.packages("RVAideMemoire")
+#install.packages("pgirmess")
+#install.packages("rmarkdown")
+#install.packages("BSDA")
+#install.packages("devtools")
+#install.package('ggplot2')
+#install.packages("writexl")
+
+library("readxl")
+library("data.table")
+library(freqtables)
+library(dplyr)
+library(epiDisplay)
+library(moments)
+library(modeest)
+library(reshape2)
+library(ggplot2)
+library(RVAideMemoire)# Paquete que contiene funciones misceláneas útiles en bioestadística
+library(pgirmess)
+library(BSDA)
+library(devtools)
+library(ggplot2)
+library("writexl")
+
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Consignas
+
+#### *1.- Para la base de datos seleccionada genere una muestra aleatoria estratificada ybalanceada por variedad de vino de tamaño n = 2000 utilizando como semilla los últimos tres dígitos del DNI/PASAPORTE.*
+
+
+```{r}
+datos_tp <-read_excel("DatosTP1.xlsx")
+glimpse(datos_tp)
+set.seed(661) #fijo la semilla 
+
+sample_var_1 = datos_tp %>% filter(datos_tp$variedad == 1)
+sample_var_2 = datos_tp %>% filter(datos_tp$variedad == 2)
+index_sample_data_1 <- sample(1:nrow(sample_var_1), size=1000, replace=FALSE)
+index_sample_data_2 <- sample(1:nrow(sample_var_2), size=1000, replace=FALSE)
+sample_data_var_1 = sample_var_1[index_sample_data_1,]
+sample_data_var_2 = sample_var_2[index_sample_data_2,]
+sample_data <- rbindlist(list(sample_data_var_1, sample_data_var_2))    # Rbind data.tables
+
+glimpse(sample_data)
+
+write_xlsx(sample_data,"df_wines.xlsx")
+
+print(paste("Balanced dataset - Variedad 1: ", nrow((sample_data %>% filter(variedad == 1)))))
+print(paste("Balanced dataset - Variedad 2: ", nrow((sample_data %>% filter(variedad == 2)))))
+```
+
+#### *2.- Realice un análisis estadístico de cada una de las variables numéricas para cada variedad de vino. Presente la información en forma tabular y conteniendo las siguientes medidas descriptivas: Cantidad de datos, mínimo, máximo, media, mediana, moda, varianza, desviación estándar, coeficiente de variación, cuartil 1, cuartil 3, rango intercuartílico, MAD, asimetría, curtosis.*
+
+
+##### Variedad 1
+```{r}
+vec_names_1 <- names(sample_data_var_1)
+
+for (i in vec_names_1) {
+  print(paste("Columna: ",i))
+  df_col = data.frame(sample_data_var_1[i])
+  print(summary(sample_data_var_1[i]))
+  print(paste("Kurtosis", kurtosis(df_col[,])))
+  print(paste("Var: ",var(df_col[,])))
+  print(paste("Skewness: ",skewness(df_col[,])))
+  print(paste("Std: ",sd(df_col[,])))
+  cv <- sd(df_col[,]) / mean(df_col[,]) * 100
+  print(paste("CV: ", cv))
+  print(paste("MAD: ", mad(df_col[,])))
+  print(paste("Moda: ",mlv(df_col[,], method = "mfv")))
+  print("-------------------------- ")
+}
+```
+
+
+##### Variedad 2
+```{r}
+vec_names_2 <- names(sample_data_var_2)
+
+for (i in vec_names_2) {
+  print(paste("Columna: ",i))
+  df_col = data.frame(sample_data_var_2[i])
+  print(summary(sample_data_var_2[i]))
+  print(paste("Kurtosis", kurtosis(df_col[,])))
+  print(paste("Var: ",var(df_col[,])))
+  print(paste("Skewness: ",skewness(df_col[,])))
+  print(paste("Std: ",sd(df_col[,])))
+  cv <- sd(df_col[,]) / mean(df_col[,]) * 100
+  print(paste("CV: ", cv))
+  print(paste("MAD: ", mad(df_col[,])))
+  print(paste("Moda: ",mlv(df_col[,], method = "mfv")))
+  print("-------------------------- ")
+}
+```
+
+
+#### *3.- Represente gráficamente cada variable eligiendo el gráfico que considere apropiado. Considere la posibilidad de generar rangos de datos para su análisis y representación gráfica de las variables.*
+
+Utilizo **boxplot** para todas las variable que me interese ver sus outliers, distribución, análisis de la media y varianza
+
+Utilizo **hist** para comprender la distribución de una variable categórica
+
+Utilizo **barplot** para entender el balancedo de otra variable categórica
+
+Utilizo **barplot** separando el dataset segun su variedad si comparando el resto de los atributos
+
+
+```{r}
+
+barplot(c(length(sample_data_var_1$variedad), length(sample_data_var_2$variedad)))
+
+hist(sample_data$calidad,xlab = "calidad",col = "yellow",border = "blue", main = "Calidad - Variedad")
+
+boxplot(sample_data$`acidez fija`,data=sample_data,xlab="acidez fija",col="orange",border="brown")
+boxplot(sample_data$`acidez volátil`,data=sample_data,xlab="acidez volátil",col="orange",border="brown")
+boxplot(sample_data$`ácido cítrico`,data=sample_data,xlab="ácido cítrico",col="orange",border="brown")
+boxplot(sample_data$`azúcar residual`,data=sample_data,xlab="azúcar residual",col="orange",border="brown")
+boxplot(sample_data$cloruros,data=sample_data,xlab="cloruros",col="orange",border="brown")
+boxplot(sample_data$`anhídrido sulfuroso libre`,data=sample_data,xlab="anhídrido sulfuroso libre",col="orange",border="brown")
+
+boxplot(sample_data$`anhídrido sulfuroso total`,xlab = "anhídrido sulfuroso total",col = "yellow",border = "blue")
+boxplot(sample_data$densidad,xlab = "densidad",col = "yellow",border = "blue")
+boxplot(sample_data$pH,xlab = "pH",col = "yellow",border = "blue")
+boxplot(sample_data$sulfatos,xlab = "sulfatos",col = "yellow",border = "blue")
+boxplot(sample_data$alcohol,xlab = "alcohol",col = "yellow",border = "blue")
+
+```
+
+Separo el dataset para ver las diferenciaciones por variedad
+
+```{r}
+
+#sample_data <- rbindlist(list(sample_data_var_1, sample_data_var_2))    # Rbind data.tables
+
+sample_data.m <- melt(sample_data, id.var = "variedad")
+
+
+sample_data_var_1.m <- melt(sample_data_var_1, id.var = "variedad")
+#sample_data_var_1.m # pasting some rows of the melted data.frame
+ggplot(data = sample_data_var_1.m, aes(x=variable, y=value)) + geom_boxplot(aes(fill=variedad)) + facet_wrap( ~ variable, scales="free")
+
+sample_data_var_2.m <- melt(sample_data_var_2, id.var = "variedad")
+#sample_data_var_2.m # pasting some rows of the melted data.frame
+ggplot(data = sample_data_var_2.m, aes(x=variable, y=value)) + geom_boxplot(aes(fill=variedad)) + facet_wrap( ~ variable, scales="free")
+
+```
+
+Analizo densidad de las variables
+
+```{r}
+
+ggplot(sample_data.m, aes(x = variable, fill = value)) + geom_density(alpha = 1,fill = "lightblue") + 
+  facet_wrap(~ variable)
+
+```
+
+
+#### *4.- Presente una tabla de frecuencias y porcentaje para la variable calidad de vino según la variedad (tinto – blanco).*
+
+Tabla de frecuencias ***calidad-variedad***
+```{r}
+quality = sample_data$calidad
+variety = sample_data$variedad
+
+df_qv = data.frame(quality,variety)
+
+freq_vc = table(df_qv)
+freq_vc
+```
+
+#### *5.- Realice un gráfico para representar la tabla construida en el punto 4.-*
+
+Gráficos de la tabla de frecuencias ***calidad-variedad***
+```{r}
+barplot(freq_vc,col='yellow',main="Calidad x Variedad")
+mosaicplot(freq_vc,main="Calidad x Variedad",ylab="Variedad",xlab="Calidad",cex=0.8)
+```
+
+#### *6.- Elija dos variables continuas, establezca rangos que representen distintos niveles de cada una y defina nuevas variables categóricas. Aplique un test adecuado para entender si existe asociación entre ambas. Utilice un nivel de significación del 5%.*
+
+##### Análisis variable alcohol
+
+```{r}
+
+#boxplot(sample_data$densidad)
+#boxplot(sample_data$alcohol)
+
+#Supongamos que queremos saber si existe diferencias entre la cantidad de alcohol perteneciente a las diferentes variedades de vinos. Tenemos los siguientes
+
+s_alcohol = sample_data$alcohol
+#s_alcohol
+#boxplot(s_alcohol)
+
+s_alcohol_cat = cut(s_alcohol, breaks = c(0,10,12,18), labels = c("Low","Medium","High"))
+
+df_av = data.frame(s_alcohol_cat,variety)
+#df_av
+
+freq_av = table(df_av)
+#freq_av
+
+
+```
+
+##### Graficamos
+
+```{r}
+
+barplot(freq_av,col='yellow')
+mosaicplot(freq_av,main="Alcohol - Variedad",ylab="Variedad",xlab="Alcohol",cex=0.8)
+
+```
+
+##### Testeamos
+
+Aplicación test Chi-cuadrado
+
+* Tenemos 3 Subniveles para la variable categórica
+
+* Tenemos 2 Poblaciones a analizar
+
+```{r}
+
+chisq.test(freq_av)
+chisq.test(freq_av)$expected
+chisq.test(freq_av)$residuals
+
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de alcohol es homogenea en las dos variaciones de vinos, para todas las categorías definidas
+
+H1: La cantidad de alcohol no es homogenea en las dos variaciones de vinos, para todas las categorías definidas
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 0.001708*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+```{r}
+
+freq_av1<-freq_av[-1,]
+freq_av1
+chisq.test(freq_av1)
+chisq.test(freq_av1)$expected
+chisq.test(freq_av1)$residuals
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de alcohol es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Medium - High
+
+H1: La cantidad de alcohol no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Medium - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 0.001224*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+```{r}
+
+freq_av2<-freq_av[-2,]
+freq_av2
+chisq.test(freq_av2)
+chisq.test(freq_av2)$expected
+chisq.test(freq_av2)$residuals
+```
+##### Planteo Hipótesis
+H0: La cantidad de alcohol es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de alcohol no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 0.0007867*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+
+```{r}
+
+freq_av3<-freq_av[-3,]
+freq_av3
+chisq.test(freq_av3)
+chisq.test(freq_av3)$expected
+chisq.test(freq_av3)$residuals
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de alcohol es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de alcohol no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - Medium
+
+##### Tenemos evidencia para no rechazar la hipótesis nula (alfa) ***0,05 < 0.894*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+
+```{r}
+
+```
+
+
+##### Análisis variable PH
+
+```{r}
+#boxplot(sample_data$pH)
+
+s_ph = sample_data$pH
+#s_ph
+#boxplot(s_ph)
+
+s_ph_cat = cut(s_ph, breaks = c(0,3.2,3.35,10), labels = c("Low","Medium","High"))
+
+df_phv = data.frame(s_ph_cat,variety)
+#df_phv
+
+freq_phv = table(df_phv)
+#freq_phv
+```
+
+##### Graficamos
+
+```{r}
+
+barplot(freq_phv,col='yellow')
+mosaicplot(freq_phv,main="PH - Variedad",ylab="Variedad",xlab="PH",cex=0.8)
+
+```
+
+Aplicación test Chi-cuadrado
+
+* Tenemos 3 Subniveles para la variable categórica
+
+* Tenemos 2 Poblaciones a analizar
+
+
+```{r}
+
+chisq.test(freq_phv)
+chisq.test(freq_phv)$expected
+chisq.test(freq_phv)$residuals
+
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de ph es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de ph no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 2.2e-16*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+```{r}
+freq_phv1<-freq_phv[-1,]
+chisq.test(freq_phv1)
+chisq.test(freq_phv1)$expected
+chisq.test(freq_phv1)$residuals
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de ph es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de ph no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 1.035e-09*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+```{r}
+freq_phv2<-freq_phv[-2,]
+chisq.test(freq_phv2)
+chisq.test(freq_phv2)$expected
+chisq.test(freq_phv2)$residuals
+
+```
+
+##### Planteo Hipótesis
+H0: La cantidad de ph es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de ph no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 2.2e-16*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+```{r}
+freq_phv3<-freq_phv[-3,]
+chisq.test(freq_phv3)
+chisq.test(freq_phv3)$expected
+chisq.test(freq_phv3)$residuals
+```
+##### Planteo Hipótesis
+H0: La cantidad de ph es homogenea en las dos variaciones de vinos, para la subpoblación de categorías Low - High
+
+H1: La cantidad de ph no es homogenea en las dos variaciones de vinos,  para la subpoblación de categorías Low - High
+
+##### Tenemos evidencia para rechazar la hipótesis nula (alfa) ***0,05 > 2.2e-16*** (p-valor) con un nivel de significancia de 0,05 para esta subpoblación -> No hay dependencia
+
+#### *7.- Seleccione otra variable continua y estime la diferencia de medias según la variedad del vino con un nivel de confianza del 95%. Interprete el resultado obtenido.*
+
+Buscamos estimar la diferencia de las medias en la densidad de ambas variedades (dos poblaciones).
+
+Tomamos normalidad por teorema central del límite
+
+#### Graficamos
+
+Check visual de normalidad
+```{r}
+boxplot(densidad~variedad, data=sample_data,xlab="Variedad",ylab="Densidad",col="orange",border="brown")
+qqnorm(sample_data$densidad, main = "Q-Q plot densidad", ylab = "Densidad", xlab = "Z" )
+hist(sample_data$densidad)
+```
+#### Planteo hipotesis
+
+Ho: Var1 = Var2
+
+H1: Var1 != Var2
+
+No tenemos la varianza poblacional, por lo que hacemos una prueba de hipótesis para saber si las varianzas son iguales o no (prueba bilateral)
+
+```{r}
+var.test(densidad~variedad, data=sample_data, alternative = "two.sided") # es una prueba bilateral
+```
+
+Hacemos la prueba con varianzas no iguales
+
+
+##### Con una prueba del estadístico T
+
+```{r}
+t.test(densidad~variedad , data=sample_data, alternative = "two.sided", var.equal = F, conf.level = 0.95)
+
+```
+
+##### *Representamos el intervalo de confianza  IC (-0.002899968, -0.002459622)* 
+##### *Valores estadísticos t = -23.872, df = 1716, p-value < 2.2e-16*
+##### *=> Mx es menos que My diferencias de medias contra menor*
+
+##### *H0: Mx = My*
+##### *H1: Mx < My*
+##### *Vemos que el alfa* ***0,05 > 2.2e-16*** *p-valor propuesta por lo que rechazamos la hipótesis nula*
+
+
+##### Con una prueba del estadístico Z
+
+```{r}
+z.test(x=sample_data$densidad,y=sample_data$variedad,alternative="two.sided",mu=0,sigma.x=sd(sample_data$densidad),sigma.y=sd(sample_data$variedad),conf.level=0.95)
+
+# IC(-0.5264862, -0.4826484)
+# prueba sobre menos
+```
+
+##### Representamos el intervalo de confianza  IC (-0.5264862 -0.4826484) 
+##### Valores estadísticos z = -45.118, p-value < 2.2e-16
+##### => Mx es menos que My diferencias de medias contra menor
+
+##### *H0: Mx = My*
+##### *H1: Mx < My*
+##### *Vemos que el alfa* ***0,05 > 2.2e-16*** *p-valor propuesta por lo que rechazamos la hipótesis nula*
+
+
+#### *8.- Según el resultado obtenido en el punto 7.- realice un test de hipótesis apropiado para determinar la diferencia de medias de la variable en estudio. Trabaje con una significación del 5%. Presente el planteo de hipótesis adecuado, la resolución y la decisión a tomar.*
+
+Buscamos estimar la diferencia de las medias en la densidad de ambas variedades (dos poblaciones).
+
+Tomamos normalidad por teorema central del límite
+
+No tenemos la varianza poblacional, por lo que hacemos una prueba de hipótesis para saber si las varianzas son iguales o no (prueba bilateral)
+
+##### Planteo hipotesis sobre las varianzas
+
+###### *Ho: Var1 = Var2*
+###### *H1: Var1 != Var2*
+
+###### *=> no son iguales las variazas*
+
+##### Hacemos la prueba con varianzas no iguales
+
+##### Obtenemos los estadisticos e IC
+###### *Representamos el intervalo de confianza  IC (-0.5264862 -0.4826484) *
+###### *Valores estadísticos z = -45.118, p-value < 2.2e-16*
+###### *=> Mx es menos que My diferencias de medias contra menor*
+
+
+##### Planteo hipotesis sobre las medias
+
+##### *H0: Mx = My*
+##### *H1: Mx < My*
+##### *Vemos que el alfa* ***0,05 > 2.2e-16*** *p-valor propuesta por lo que rechazamos la hipótesis nula*
+
+
+#### *9.- ¿Se puede afirmar que hay diferencias significativas en la calidad del vino tinto respecto al vino blanco? Elija un test de hipótesis adecuado. Trabaje con una significación del 5%.*
+
+
+```{r}
+
+#glimpse(sample_data)
+sample_quality_var1 = sample_data %>% filter(sample_data$variedad == 1)
+sample_quality_var2 = sample_data %>% filter(sample_data$variedad == 2)
+
+#sample_quality_var1$calidad
+#sample_quality_var2$calidad
+#tcl normal, deberia usar Z, Tiende aproximarse a la normalidad
+shapiro.test(sample_data_var_1$calidad)
+#p muy bajo entonces rechazo hipotesis de normalidad => Puede ser un valor atipico
+shapiro.test(sample_data_var_2$calidad) 
+#p muy bajo entonces rechazo hipotesis de normalidad
+summary(sample_data_var_1$calidad)
+summary(sample_data_var_2$calidad)
+
+```
+
+```{r}
+
+#Graficamos
+myList <-list(sample_data_var_1$calidad, sample_data_var_2$calidad)
+df <- melt(myList)
+#df
+
+qplot(factor(L1), value, data = df, geom = "boxplot", xlab="Variedades")
+
+ggplot(sample_data, aes(x = calidad)) +
+  geom_histogram(fill = "white", colour = "black") +
+  facet_grid(variedad ~ .) + theme_bw()
+
+
+qqnorm(sample_data_var_1$calidad, xlab = "", ylab = "",
+       main = "sample_data_var_1$calidad", col = "firebrick")
+qqnorm(sample_data_var_2$calidad, xlab = "", ylab = "",
+       main = "sample_data_var_1$calidad", col = "springgreen4")
+
+
+```
+
+
+##### *Usando wilcox, obtengo un p-valor muy chico, pero dado a problemas con empates, prosigo a suponer normalidad por TCL y utilizar t.test para testear la diferencia de medias* (Lo dejo como evidencia de pruebas)
+
+```{r}
+
+
+wilcox.test(sample_data_var_1$calidad, sample_data_var_2$calidad,alternative = "two.sided")
+# p-value = 1.166e-09 por lo que rechazamos la hipotesis nula, hay diferencias en la mediana poblacional
+
+```
+
+##### *Pruebo con t.test. Al ser una cantidad significativa de valores, tambien habria que descartar este test* (Lo dejo como evidencia de pruebas)
+
+```{r}
+
+#Pruebo con t.test
+t.test(x=sample_data_var_1$calidad, y= sample_data_var_2$calidad, alternative = "two.sided", mu=0,
+       var.equal = F, conf.level = 0.95)
+
+#IC (0.1501246 0.3018754)
+#Ho Mx-My = 0
+#Ha Mx-My > 0
+
+#Siendo p-valor = 6.038e-09 < 0,05 => rechazamos la hipotesis nula, hay diferencias en la mediana poblacional
+
+```
+
+#### Dado los valores arrojadon por la prueba de t.test
+##### IC (0.1501246 0.3018754) => Realizo hipotesis comparando con mayor
+
+##### *Ho: Mx-My = 0*
+##### *Ha: Mx-My > 0*
+
+##### ***Siendo p-valor = 6.038e-09 < 0,05 => rechazamos la hipotesis nula, hay diferencias en la mediana poblacional***
+
+
+##### *Realizo la prueba con z.test => Conjunto de valor grandes, normalidad por TCL*
+
+```{r}
+
+z.test(x=sample_data_var_1$calidad,
+       y= sample_data_var_2$calidad,
+       alternative="two.sided",
+       mu=0,
+       sigma.x=sd(sample_data_var_1$calidad),
+       sigma.y=sd(sample_data_var_2$calidad),
+       conf.level=0.95)
+
+```
+
+#### Dado los valores arrojadon por la prueba de t.test
+##### IC (0.1501712 0.3018288) => Realizo hipotesis comparando con mayor
+
+##### *Ho: Mx-My = 0*
+##### *Ha: Mx-My > 0*
+
+##### ***Siendo p-valor = 5.174e-09 < 0,05 => rechazamos la hipotesis nula, hay diferencias en la mediana poblacional***
+
+
+#### *10.- Decida si existen diferencias significativas en las proporciones de alcohol entre los vinos de calidad baja, media y alta. Justifique.*
+
+#### Planteo hipótesis
+
+H0: No existen diferencias significativas en las proporciones de alcohol ente los vinos de calidad baja, media y alta
+H1: Existen diferencias significativas en las proporciones de alcohol ente los vinos de calidad baja, media y alta
+
+#### Graficamos y preparamos los datos
+```{r}
+
+s_calidad  = sample_data$calidad
+#s_calidad
+boxplot(s_calidad)
+
+s_calidad_cat = cut(s_calidad, breaks = c(0,5,6,18), labels = c("Low","Medium","High"))
+#s_calidad_cat
+df_cal_alcohol = data.frame(sample_data$alcohol,s_calidad_cat)
+#df_cal_alcohol
+
+
+ggplot(df_cal_alcohol,aes(x=s_calidad_cat,y=sample_data$alcohol,fill=s_calidad_cat)) + geom_boxplot() + xlab("") + scale_fill_brewer(palette="Pastel1")
+#df_cal_alcohol
+
+# Produce boxplots
+grupoA=df_cal_alcohol[df_cal_alcohol$s_calidad_cat=="Low",1]
+grupoB=df_cal_alcohol[df_cal_alcohol$s_calidad_cat=="Medium",1]
+grupoC=df_cal_alcohol[df_cal_alcohol$s_calidad_cat=="High",1]
+
+```
+
+
+#### Probamos normaliadd
+```{r}
+shapiro.test(grupoA)
+shapiro.test(grupoB)
+shapiro.test(grupoC)
+
+# Vemos que las pruebas de shapiro arrojan un valor muy bajo por lo que no tenemos normalidad, entonces procedemos a usar kruskal 
+```
+
+#### Realizamos test de kruskal para analizar si existen diferencias significativas
+```{r}
+kruskal.test(sample_data$alcohol, s_calidad_cat)# Realiza el test de Kruskal
+#Vemos el p-valor muy chico por lo que determinamos rechazar la hipotesis, sabemos que alguno de los grupos difiere
+
+kruskalmc(sample_data$alcohol~s_calidad_cat )# Realiza un test de comparación múltiple entre tratamientos luego del test de Kruskal Wallis
+
+```
+
+#### Obtenemos un p-valor bien bajo por lo que rechazamos la hipótesis nula, definimos que existen diferencias significativas entre los vinos de calidad baja, media y alta dada una significancia de 0,05
+
+11.- Presente un informe final con un mínimo de 500 y un máximo de 800 palabras del
+análisis de la base de datos, describiendo la base de datos, indicando la presencia de
+valores atípicos y las conclusiones a las que se abordó luego del análisis.
+
+#### Conclusiones
+
+*Analizando el dataset podemos observar que en la gran mayoría de los atributos se presentan diferencias de las variables, practicamente en ninguna las medias muestrales coinciden, a pesar de esto la calidad presenta similitudes importantes ente ambas variedades de vinos.*
+
+*Se observa en todas las variables una cantidad de outliers muy importantes, los cuales perjudican a los calculos que estamos realizando a lo largo del trabajo practico, seria adecuado poder vovler a realizar las mismas pruebas y analisis eliminiandolos o revisando si es necesaria alguna imputacion. Estos datos atipicos generan una ponderacion mayor que aquellos cercanos a la media lo que puede conducir a interpretaciones engañosas de las diferentes pruebas realizadas sobre las variables.*
+
+*Por ejemplo podemos observar para el conjunto de datos asociados a la variedad 1, los atributos acidez volatil, ácido cítrico, cloruro, anhídrico sulfiroso libre, presentan debido a los outliers una dispersion muy grandes de los datos, necesitan una tratamiento importante*
+
+*En el conjunto de datos asociados a la variedad 2, los atributos azucar residual, cloruros, sultafo, presentan debido a los outliers una dispersión muy grandes de los datos, necesitan una tratamiento importante*
+
+*Observamos que el alcohol, cuando lo categorizamos en bajo y medio, encontramos homogeneidad para las diferentes variedades de vinos, no asi cuando involucramos a la subpoblacion que tiene mayor cantidad de alcohol que son independientes.*
+
+*Para el analisis de homogeneidad del ph, nos arroja que no existe homogeneidad entre las distintas variedades de vinos para las subpoblaciones determinadas en el analisis.*
+
+*En cuanto a la calidad de los vinos, a pesar que graficamente parecen muy similares las medias asociadas a cada una de las distintas variedades, al realizar los tests correspondientes, nos encontramos que con una significancia del 0,05, el test rechaza la hipotesis nula de igualdad, siendo el vino blanco de mayor calidad que el vino tinto.*
+
+```{}
+```
+
+
